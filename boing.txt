@@ -1,0 +1,523 @@
+	local suspension = {} 
+	local changeBoxes = {}
+	
+	local autoApplyTune = false
+	
+	local setupBoing = true
+	local boingKeyBindEnabled = false
+	local boingLift = 5
+	local boingStiffAdd = 12500
+	local boinging = false
+
+	local car = nil
+	local UIS = game:GetService("UserInputService")
+	local boingConnection
+	
+	local function detectCar()
+		if game.Workspace:FindFirstChild("SessionVehicles") then
+			-- Greenville
+			car = game.Workspace:FindFirstChild("SessionVehicles"):FindFirstChild(game.Players.LocalPlayer.Name.."-Car")
+		else
+			if game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character.Humanoid.SeatPart then
+				car = game.Players.LocalPlayer.Character.Humanoid.SeatPart.Parent
+			end
+		end
+	end
+	detectCar()
+	
+	local function boing()
+		if not car then
+			detectCar() 
+			return
+		end
+		if car and car:FindFirstChild("Wheels") and not boinging then
+			boinging = true
+			task.spawn(function()
+				local sound = Instance.new("Sound", game.Players.LocalPlayer.PlayerGui)
+				sound.SoundId = "rbxassetid://1555412484"
+				sound.Volume = .25
+				sound:Play()
+				sound.Ended:Wait()
+				sound:Destroy()
+			end)
+			for _, spring in ipairs(car.Wheels:GetDescendants()) do
+				task.spawn(function()
+					if spring:IsA("SpringConstraint") then
+						spring.Stiffness = spring.Stiffness + boingStiffAdd
+						spring.FreeLength = spring.FreeLength + boingLift
+						spring.Damping = 150
+						task.wait(.5)
+						spring.Damping = suspension[spring].Damping
+						spring.Stiffness = suspension[spring].Stiffness
+						spring.FreeLength = suspension[spring].FreeLength
+						boinging = false
+					end
+				end)
+			end
+		end
+	end
+
+	boingConnection = UIS.InputBegan:Connect(function(inp, ignore)
+		if not ignore and boingKeyBindEnabled then
+			if inp.UserInputType == Enum.UserInputType.Keyboard and inp.KeyCode == Enum.KeyCode.V then
+				boing()
+			end
+		end
+	end)
+	
+	--[[ Begin New Code ]]--
+	
+	local plr = game.Players.LocalPlayer
+	local character = plr.Character
+	local plrGui = plr.PlayerGui
+	local UI = {}
+	local UIColors = {
+		Background = Color3.new(0.117647, 0.117647, 0.117647),
+		BackgroundSecondary = Color3.new(0.239216, 0.239216, 0.239216),
+		Primary = Color3.new(0.380392, 0.462745, 0.831373),
+		TextPrimary = Color3.new(1,1,1),
+		TextSecondary = Color3.new(0.65, 0.65, 0.65),
+		
+		FontDefault = Font.fromEnum(Enum.Font.Arimo),
+		FontBold = Font.fromEnum(Enum.Font.ArimoBold)
+	}
+	
+	suspension.changed = function()
+		for i, box in pairs(changeBoxes) do
+			task.spawn(function()
+				for i, thing in pairs(suspension) do
+					if typeof(i) == "Instance" then
+						box.PlaceholderText = thing[box:GetAttribute("changedValue")]
+						box.Text = thing[box:GetAttribute("changedValue")]
+						break
+					end
+				end
+			end)
+		end
+	end
+	
+	local function setSuspension(freeLength:number, stiffness:number, maxLength:number, minLength:number, damping:number)
+		detectCar()
+		task.wait()
+		if car and car:FindFirstChild("Wheels") then
+			for _, spring in ipairs(car.Wheels:GetDescendants()) do
+				task.spawn(function()
+					if spring:IsA("SpringConstraint") then
+						if freeLength then
+							suspension[spring].FreeLength = freeLength
+							suspension.FreeLength = freeLength
+							spring.FreeLength = freeLength
+						end
+						if stiffness then
+							suspension[spring].Stiffness = stiffness
+							suspension.Stiffness = stiffness
+							spring.Stiffness = stiffness
+						end
+						if maxLength then
+							suspension[spring].MaxLength = maxLength
+							suspension.MaxLength = maxLength
+							spring.MaxLength = maxLength
+						end
+						if minLength then
+							suspension[spring].MinLegth = minLength
+							suspension.MinLength = minLength
+							spring.MinLength = minLength
+						end
+						if damping then
+							suspension[spring].Damping = damping
+							suspension.Damping = damping
+							spring.Damping = damping
+						end
+					end
+				end)
+			end
+			task.wait()
+			suspension.changed()
+		end
+	end
+	
+	local function setupSuspension()
+		detectCar()
+		if character and character.Humanoid.SeatPart and character.Humanoid.SeatPart.Parent:FindFirstChild("Wheels") then
+			for _, spring in ipairs(car.Wheels:GetDescendants()) do
+				task.spawn(function()
+					if spring:IsA("SpringConstraint") then
+						if not suspension[spring] or typeof(suspension[spring]) ~= table then
+							suspension[spring] = {}
+						end
+						suspension[spring].FreeLength = spring.FreeLength
+						suspension[spring].Stiffness = spring.Stiffness
+						suspension[spring].MaxLength = spring.MaxLength
+						suspension[spring].MinLength = spring.MinLength
+						suspension[spring].Damping = spring.Damping
+						-- Values used to auto-apply
+						suspension.FreeLength = spring.FreeLength
+						suspension.Stiffness = spring.Stiffness
+						suspension.MaxLength = spring.MaxLength
+						suspension.MinLength = spring.MinLength
+						suspension.Damping = spring.Damping
+					end
+				end)
+			end
+			task.wait(.1)
+			suspension.changed()
+		end
+	end
+	
+	local function vehicleEntered()
+		if character.Humanoid.SeatPart then
+			detectCar()
+			local seatpart = character.Humanoid.SeatPart
+			car = seatpart.Parent
+			if autoApplyTune then
+				setSuspension(suspension.FreeLength, suspension.Stiffness, suspension.MaxLength, suspension.MinLength, suspension.Damping)
+			else
+				setupSuspension()
+			end
+		end
+	end
+	
+	character.Humanoid:GetPropertyChangedSignal("SeatPart"):Connect(vehicleEntered)
+	setupSuspension()
+	
+	local function createUI()
+		-- Detect a ScreenGui to avoid detection if possible
+		if plrGui:FindFirstChild("ScreenGui") then
+			UI.ScreenGui = plrGui:FindFirstChild("ScreenGui")
+			UI.ScreenGui.Enabled = true
+			UI.ScreenGui.IgnoreGuiInset = true
+			UI.ScreenGui.ResetOnSpawn = false
+		else
+			UI.ScreenGui = Instance.new("ScreenGui", plrGui)
+			UI.ScreenGui.IgnoreGuiInset = true
+			UI.ScreenGui.ResetOnSpawn = false
+			UI.ScreenGui.Enabled = true
+		end
+		
+		if UI.ScreenGui:FindFirstChild("BoingMenu") then
+			UI.ScreenGui:FindFirstChild("BoingMenu"):Destroy()
+		end
+		
+		UI.MainFrame = Instance.new("Frame", UI.ScreenGui)
+		UI.MainFrame.AnchorPoint = Vector2.new(.5, .5)
+		UI.MainFrame.Position = UDim2.new(.25, 0, .5, 0)
+		UI.MainFrame.Draggable = true
+		UI.MainFrame.Active = true
+		UI.MainFrame.Size = UDim2.new(.35, 0, .35, 0)
+		UI.MainFrame.BackgroundColor3 = UIColors.Background
+		UI.MainFrame.BorderSizePixel = 0
+		UI.MainFrame.Name = "BoingMenu"
+		Instance.new("UICorner", UI.MainFrame)
+		
+		UI.TopBar = Instance.new("Frame", UI.MainFrame)
+		UI.TopBar.BackgroundColor3 = UIColors.Primary
+		UI.TopBar.Size = UDim2.new(1, 0, .15, 0)
+		UI.TopBar.BorderSizePixel = 0
+		Instance.new("UICorner", UI.TopBar)
+		
+		UI.TopBarTitle = Instance.new("TextLabel", UI.TopBar)
+		UI.TopBarTitle.BackgroundTransparency = 1
+		UI.TopBarTitle.Text = "boing menu"
+		UI.TopBarTitle.TextColor3 = UIColors.TextPrimary
+		UI.TopBarTitle.FontFace = UIColors.FontBold
+		UI.TopBarTitle.Size = UDim2.new(.4, 0, 1, 0)
+		UI.TopBarTitle.TextScaled = true
+		UI.TopBarTitle.TextXAlignment = Enum.TextXAlignment.Left
+		UI.TopBarTitle.Position = UDim2.new(0, 10, 0, 0)
+		Instance.new("UITextSizeConstraint", UI.TopBarTitle).MaxTextSize = 25
+		
+		UI.TopBarVersion = Instance.new("TextLabel", UI.TopBar)
+		UI.TopBarVersion.Text = "v0.1"
+		UI.TopBarVersion.TextColor3 = UIColors.TextPrimary
+		UI.TopBarVersion.Position = UDim2.new(1, -5, 0.5, 0)
+		UI.TopBarVersion.AnchorPoint = Vector2.new(1, 0.5)
+		UI.TopBarVersion.Size = UDim2.new(.075, 0, .5, 0)
+		UI.TopBarVersion.BackgroundTransparency = 1
+		UI.TopBarVersion.FontFace = UIColors.FontBold
+		UI.TopBarVersion.TextScaled = true
+		Instance.new("UITextSizeConstraint", UI.TopBarVersion).MaxTextSize = 25
+		
+		UI.ContentFrame = Instance.new("ScrollingFrame", UI.MainFrame)
+		UI.ContentFrame.Size = UDim2.new(1, 0, .85, 0)
+		UI.ContentFrame.AnchorPoint = Vector2.new(0, 1)
+		UI.ContentFrame.Position = UDim2.new(0, 0, 1, 0)
+		UI.ContentFrame.BackgroundTransparency = 1
+		UI.ContentFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+		UI.ContentFrame.CanvasSize = UDim2.new(.95,0,1,0)
+		UI.ContentFrame.VerticalScrollBarInset = Enum.ScrollBarInset.Always
+		UI.ContentFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+		UI.ContentFrameLayout = Instance.new("UIListLayout", UI.ContentFrame)
+		UI.ContentFrameLayout.SortOrder = Enum.SortOrder.Name
+		UI.ContentFrameLayout.Padding = UDim.new(0, 5)
+		UI.ContentFrameLayout.FillDirection = Enum.FillDirection.Vertical
+		UI.ContentFrameLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		
+		UI.NotificationFrame = Instance.new("Frame", UI.ScreenGui)
+		UI.NotificationFrame.BackgroundTransparency = 1
+		UI.NotificationFrame.Size = UDim2.new(0.5, 0, 0, 0)
+		UI.NotificationFrame.Position = UDim2.new(0.5, 0, 0.05, 0)
+		UI.NotificationFrame.AnchorPoint = Vector2.new(0.5, 0)
+		UI.NotificationFrameLayout = Instance.new("UIListLayout", UI.NotificationFrame)
+		UI.NotificationFrameLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		UI.ContentFrameLayout.FillDirection = Enum.FillDirection.Vertical
+		UI.ContentFrameLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		
+		local function createNotification(header, mainText)
+			task.spawn(function()
+				local sound = Instance.new("Sound", UI.ScreenGui)
+				sound.SoundId = "rbxassetid://5949658966"
+				sound:Play()
+				
+				local frame = Instance.new("Frame", UI.NotificationFrame)
+				frame.Size = UDim2.new(1, 0, 0, 50)
+				frame.BackgroundColor3 = UIColors.Background
+				frame.BackgroundTransparency = 0.2
+				Instance.new("UICorner", frame)
+				
+				local headerLabel = Instance.new("TextLabel", frame)
+				headerLabel.Text = header
+				headerLabel.BackgroundTransparency = 1
+				headerLabel.Size = UDim2.new(1, 0, 0.25, 0)
+				headerLabel.TextColor3 = UIColors.TextPrimary
+				headerLabel.FontFace = UIColors.FontBold
+				headerLabel.TextScaled = true
+				
+				local mainLabel = Instance.new("TextLabel", frame)
+				mainLabel.Text = mainText
+				mainLabel.BackgroundTransparency = 1
+				mainLabel.Size = UDim2.new(1, 0, 0.75, 0)
+				mainLabel.AnchorPoint = Vector2.new(0, 1)
+				mainLabel.Position = UDim2.new(0, 0, 1, 0)
+				mainLabel.TextColor3 = UIColors.TextSecondary
+				mainLabel.FontFace = UIColors.FontDefault
+				mainLabel.TextScaled = true
+				Instance.new("UITextSizeConstraint", mainLabel).MaxTextSize = 25
+				
+				task.wait(5)
+				
+				frame:Destroy()
+				sound:Destroy()
+			end)
+		end
+		
+		local function createOption(type:string, optionName:string, optionText:string, optionInfo:string, firstFunc, secondFunc:any, defaultText)
+			task.spawn(function()
+				UI["_"..optionName] = Instance.new("TextButton", UI.ContentFrame)
+				local newOption = UI["_"..optionName]
+				newOption.Size = UDim2.new(1, -5 ,.15, -5)
+				newOption.BackgroundColor3 = UIColors.BackgroundSecondary
+				newOption.Text = ""
+				newOption.Name = optionName
+				Instance.new("UICorner", newOption)
+
+				local text = Instance.new("TextLabel", newOption)
+				text.Text = optionText or ""
+				text.Size = UDim2.new(.5, 0, .75, 0)
+				text.Position = UDim2.new(0, 5, 0, 0)
+				text.TextXAlignment = Enum.TextXAlignment.Left
+				text.TextColor3 = UIColors.TextPrimary
+				text.BackgroundTransparency = 1
+				text.BorderSizePixel = 0
+				text.TextScaled = true
+				Instance.new("UITextSizeConstraint", text).MaxTextSize = 15
+
+				local info = Instance.new("TextLabel", text)
+				info.Text = optionInfo or ""
+				info.Size = UDim2.new(1, 0, .25, 0)
+				info.Position = UDim2.new(0, 0, 1, 0)
+				info.BackgroundTransparency = 1
+				info.BorderSizePixel = 0
+				info.TextColor3 = UIColors.TextSecondary
+				info.TextXAlignment = Enum.TextXAlignment.Left
+
+				local currentValue = nil
+
+				if type == "click" then
+					newOption.MouseButton1Click:Connect(function()
+						task.spawn(function()
+							firstFunc()
+							if secondFunc then
+								secondFunc()
+							end
+						end)
+					end)
+				elseif type == "toggle" then
+					local toggleBox = Instance.new("ImageLabel", newOption)
+					toggleBox.Position = UDim2.new(1, -5, .5, 0)
+					toggleBox.AnchorPoint = Vector2.new(1, .5)
+					toggleBox.BackgroundTransparency = 1
+					toggleBox.Size = UDim2.new(.8, 0, .8, 0)
+					toggleBox.Image = "rbxassetid://4458801905"
+					Instance.new("UIAspectRatioConstraint", toggleBox)
+					currentValue = false
+					newOption.MouseButton1Click:Connect(function()
+						if currentValue == false then
+							toggleBox.Image = "rbxassetid://4458804262"
+							firstFunc()
+							currentValue = not currentValue
+						else
+							toggleBox.Image = "rbxassetid://4458801905"
+							secondFunc()
+							currentValue = not currentValue
+						end
+					end)
+				elseif type == "number" then
+					local numberBox = Instance.new("TextBox", newOption)
+					numberBox.Position = UDim2.new(1, -5, .5, 0)
+					numberBox.AnchorPoint = Vector2.new(1, .5)
+					numberBox.BackgroundColor3 = UIColors.Background
+					numberBox.Size = UDim2.new(.15, 0, .7, 0)
+					numberBox.PlaceholderText = defaultText or "0"
+					numberBox.Text = defaultText or "0"
+					numberBox.TextColor3 = UIColors.TextPrimary
+					numberBox.PlaceholderColor3 = UIColors.TextSecondary
+					numberBox.ClearTextOnFocus = false
+					numberBox.TextTruncate = Enum.TextTruncate.AtEnd
+					Instance.new("UICorner", numberBox)
+					numberBox.FocusLost:Connect(function()
+						if tonumber(numberBox.Text) then
+							firstFunc(numberBox.Text)
+						end
+					end)
+
+					if secondFunc and typeof(secondFunc) == "string" then
+						numberBox:SetAttribute("changedValue", secondFunc)
+						table.insert(changeBoxes, numberBox)
+					end
+				elseif type == "string" then
+					local stringBox = Instance.new("TextBox", newOption)
+					stringBox.Position = UDim2.new(1, -5, .5, 0)
+					stringBox.AnchorPoint = Vector2.new(1, .5)
+					stringBox.BackgroundColor3 = UIColors.Background
+					stringBox.Size = UDim2.new(.3, 0, .7, 0)
+					stringBox.PlaceholderText = defaultText or ""
+					stringBox.Text = defaultText or ""
+					stringBox.TextColor3 = UIColors.TextPrimary
+					stringBox.PlaceholderColor3 = UIColors.TextSecondary
+					stringBox.ClearTextOnFocus = false
+					stringBox.TextTruncate = Enum.TextTruncate.AtEnd
+					Instance.new("UICorner", stringBox)
+					stringBox.FocusLost:Connect(function()
+						if tonumber(stringBox.Text) then
+							firstFunc(stringBox.Text)
+						end
+					end)
+
+					--if secondFunc and typeof(secondFunc) == "string" then
+					--	stringBox:SetAttribute("changedValue", secondFunc)
+					--	table.insert(changeBoxes, stringBox)
+					--end
+				elseif type == "header" then
+					text.FontFace = UIColors.FontBold
+					text.Size = UDim2.new(1, 0, 1, 0)
+					newOption.BackgroundTransparency = 1
+					info:Destroy()
+				end
+			end)
+		end
+		
+		UI.ScreenGui.Destroying:Connect(function()
+			boingConnection:Disconnect()
+			task.wait(.5)
+		end)
+		
+		UI.MainFrame.Destroying:Connect(function()
+			boingConnection:Disconnect()
+			task.wait(.5)
+		end)
+		
+		createOption("toggle", "auto apply tune", "Auto Apply Tune", "Automatically applies the previous tune to new vehicles.",
+			function() 
+				autoApplyTune = true
+			end,
+			function()
+				autoApplyTune = false
+			end
+		)
+		
+		createOption("header", "b_", "Boing Options")
+		
+		createOption("click", "boing", "Boing", "Makes your car BOING!",
+			function() 
+				boing()
+			end
+		)
+		
+		createOption("toggle", "boing keybind", "Boing Keybind Enabled", "Makes your car BOING with \"V\"!",
+			function() 
+				boingKeyBindEnabled = true
+			end,
+			function()
+				boingKeyBindEnabled = false
+			end
+		)
+		
+		createOption("number", "boing height add", "Height", "How much height is added when boinging.",
+			function(value) 
+				boingLift = value
+			end,
+			nil,
+			boingLift
+		)
+
+		createOption("number", "boing stiff add", "Stiffness", "How much stiffness is added when boinging.",
+			function(value) 
+				boingStiffAdd = value
+			end,
+			nil,
+			boingStiffAdd
+		)
+		
+		createOption("header", "s_", "Suspension")
+		
+		createOption("number", "suspension freelength", "FreeLength", "How high your suspension is.",
+			function(value) 
+				setSuspension(value)
+			end,
+			-- When this value changes, modify the text & placeholder
+			"FreeLength"
+		)
+		
+		createOption("number", "suspension stiffness", "Stiffness", "How hard your suspension is.",
+			function(value) 
+				setSuspension(nil ,value)
+			end,
+			"Stiffness"
+		)
+		
+		createOption("number", "suspension maxlength", "MaxLength", "How high your suspension can go.",
+			function(value) 
+				setSuspension(nil, nil, value)
+			end,
+			"MaxLength"
+		)
+		
+		createOption("number", "suspension minlength", "MinLength", "How low your suspension can go.",
+			function(value) 
+				setSuspension(nil, nil, nil, value)
+			end,
+			"MinLength"
+		)
+		
+		createOption("number", "suspension damping", "Damping", "How much your suspension absorbs.",
+			function(value) 
+				setSuspension(nil, nil, nil, nil, value)
+			end,
+			"Damping"
+		)
+		
+		createOption("header", "z_", "Misc")
+		
+		createOption("click", "zunlock cars", "Unlock Cars", "Attempts to unlock all vehicles (walk into seats to enter).",
+			function() 
+				for _, obj in ipairs(game.Workspace:GetDescendants()) do
+					if obj:IsA("Seat") or obj:isA("VehicleSeat") then
+						obj.Disabled = false
+					end
+				end
+				createNotification("Success", "Attempted to unlock all vehicles currently spawned.")
+			end
+		)
+	end
+	
+	createUI()
