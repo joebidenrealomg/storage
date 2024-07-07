@@ -43,13 +43,16 @@
 			for _, spring in ipairs(car.Wheels:GetDescendants()) do
 				task.spawn(function()
 					if spring:IsA("SpringConstraint") then
+						local tempMax = spring.MaxLength
 						spring.Stiffness = spring.Stiffness + boingStiffAdd
 						spring.FreeLength = spring.FreeLength + boingLift
+						spring.MaxLength = spring.MaxLength + boingLift
 						spring.Damping = 150
 						task.wait(.5)
 						spring.Damping = suspension[spring].Damping
 						spring.Stiffness = suspension[spring].Stiffness
 						spring.FreeLength = suspension[spring].FreeLength
+						spring.MaxLength = tempMax
 						boinging = false
 					end
 				end)
@@ -103,6 +106,9 @@
 			for _, spring in ipairs(car.Wheels:GetDescendants()) do
 				task.spawn(function()
 					if spring:IsA("SpringConstraint") then
+						if typeof(suspension[spring]) ~= "table" then
+							suspension[spring] = {}
+						end
 						if freeLength then
 							suspension[spring].FreeLength = freeLength
 							suspension.FreeLength = freeLength
@@ -119,7 +125,7 @@
 							spring.MaxLength = maxLength
 						end
 						if minLength then
-							suspension[spring].MinLegth = minLength
+							suspension[spring].MinLength = minLength
 							suspension.MinLength = minLength
 							spring.MinLength = minLength
 						end
@@ -227,7 +233,7 @@
 		Instance.new("UITextSizeConstraint", UI.TopBarTitle).MaxTextSize = 25
 		
 		UI.TopBarVersion = Instance.new("TextLabel", UI.TopBar)
-		UI.TopBarVersion.Text = "v0.1"
+		UI.TopBarVersion.Text = "v0.2"
 		UI.TopBarVersion.TextColor3 = UIColors.TextPrimary
 		UI.TopBarVersion.Position = UDim2.new(1, -5, 0.5, 0)
 		UI.TopBarVersion.AnchorPoint = Vector2.new(1, 0.5)
